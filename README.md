@@ -1,6 +1,8 @@
 # YoloV5-InferEngine
 This repository contains a YOLOv5 inference engine implemented in C++ using TensorRT. The engine is designed to perform efficient object detection with YOLOv5 models.
 
+This File will create an InferEngine.dll and InferEngine.lib
+
 ## **Enviroment:**
 **opencv**:3.2.0
 
