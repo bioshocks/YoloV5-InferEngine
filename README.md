@@ -24,8 +24,6 @@ Clone the repository:
 
 git clone https://github.com/bioshocks/YOLOV5-InferEngine.git
 
-cd YOLOv5-InferEngine
-
 
 
 
