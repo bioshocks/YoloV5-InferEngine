@@ -13,7 +13,7 @@
 #include <vector>
 #include <opencv2/opencv.hpp>
 #include <algorithm>
- 
+#include <chrono>
 INFERENGINE_API class Logger : public nvinfer1::ILogger {
     void log(nvinfer1::ILogger::Severity severity, nvinfer1::AsciiChar const* msg) noexcept override {
         if (severity != nvinfer1::ILogger::Severity::kINFO)

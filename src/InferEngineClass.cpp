@@ -36,7 +36,9 @@ size_t  YOLOv5Inference::calculateVolume(const nvinfer1::Dims& dims) {
     }
     return volume;
 }
-INFERENGINE_API std::vector<Result> YOLOv5Inference::infer(cv::Mat& src,float iou_thresh,float class_thresh,float NMS_thresh) {
+
+
+INFERENGINE_API std::vector<Result> YOLOv5Inference::infer(cv::Mat& src,float iou_thresh,float class_thresh,float NMS_thresh){
     int x_offset = 0;
     int y_offset = 0;
     float ratio = 0;
@@ -58,7 +60,7 @@ INFERENGINE_API std::vector<Result> YOLOv5Inference::infer(cv::Mat& src,float io
         const float objectness = ptr[4];
         if (objectness > iou_thresh) {
             const int label = std::max_element(ptr + 5, ptr + 5 + num_class) - (ptr + 5);
-            const float confidence = result_mem[5 + label] * objectness;
+            const float confidence = ptr[5 + label] * objectness;
             if (confidence >= class_thresh) {
                 Result result;
                 result.bbox[0] = ptr[0] - ptr[2] * 0.5f;
@@ -92,6 +94,7 @@ std::vector<char> YOLOv5Inference::readFile(const std::string& filepath)
     file.read(buffer.data(), size);
     return buffer;
 }
+
 std::vector<float> YOLOv5Inference::preprocessImage(cv::Mat& src, const nvinfer1::Dims& inputDims, int& x_offset, int& y_offset, float& ratio) {
     //cv::cvtColor(img, img, cv::COLOR_BGR2RGB);
     const int model_width = image_size;
@@ -100,8 +103,8 @@ std::vector<float> YOLOv5Inference::preprocessImage(cv::Mat& src, const nvinfer1
     ratio = std::min(model_width / (src.cols * 1.0f),
         model_height / (src.rows * 1.0f));
     // 等比例缩放
-    const int border_width = src.cols * ratio;
-    const int border_height = ceil(src.rows * ratio);
+    const int border_width = std::round(src.cols * ratio);
+    const int border_height = std::round(src.rows * ratio);
     // 计算偏移值
     x_offset = (model_width - border_width) / 2;
     y_offset = (model_height - border_height) / 2;
@@ -115,13 +118,10 @@ std::vector<float> YOLOv5Inference::preprocessImage(cv::Mat& src, const nvinfer1
     const int channels = resizedImg.channels();
     const int width = resizedImg.cols;
     const int height = resizedImg.rows;
-    for (int c = 0; c < channels; c++) {
-        for (int h = 0; h < height; h++) {
-            for (int w = 0; w < width; w++) {
-                input_blob[c * width * height + h * width + w] =
-                    resizedImg.at<cv::Vec3f>(h, w)[c];
-            }
-        }
+    cv::Mat chw[3];
+    cv::split(resizedImg, chw); 
+    for (int i = 0; i < 3; i++) {
+        memcpy(input_blob.data() + i * width * height, chw[i].data, width * height * sizeof(float));
     }
     return input_blob;
 }
@@ -207,15 +207,39 @@ std::vector<Result> YOLOv5Inference::NMS(std::vector<Result>& proposals, float N
     }
     return result;
 }
-std::vector<Result> YOLOv5Inference::PostProcess(std::vector<Result>& proposals, int imgHeight, int imgWidth,int xoffset , int yoffset,float ratio)
+std::vector<Result> YOLOv5Inference::PostProcess(
+    std::vector<Result>& proposals,
+    int imgHeight,
+    int imgWidth,
+    int xoffset,
+    int yoffset,
+    float ratio)
 {
-    for (int i = 0; i < proposals.size(); ++i)
+    std::vector<Result> output;
+    if (ratio <= 1e-6f)
+        return output;
+
+    for (auto& p : proposals)
     {
-        Result& p = proposals[i];
-        p.bbox[0] = (std::max)(0.f, (p.bbox[0] - xoffset) / ratio);
-        p.bbox[1] = (std::max)(0.f, (p.bbox[1] - yoffset) / ratio);
-        p.bbox[2] = (std::min)((float)imgWidth, (p.bbox[2] - xoffset) / ratio);
-        p.bbox[3] = (std::min)((float)imgHeight, (p.bbox[3] - yoffset) / ratio);
+        Result r = p;
+
+
+        float x1 = (r.bbox[0] - xoffset) / ratio;
+        float y1 = (r.bbox[1] - yoffset) / ratio;
+        float x2 = (r.bbox[2] - xoffset) / ratio;
+        float y2 = (r.bbox[3] - yoffset) / ratio;
+
+
+        r.bbox[0] = std::clamp(std::min(x1, x2), 0.f, (float)(imgWidth - 1));
+        r.bbox[1] = std::clamp(std::min(y1, y2), 0.f, (float)(imgHeight - 1));
+        r.bbox[2] = std::clamp(std::max(x1, x2), 0.f, (float)(imgWidth - 1));
+        r.bbox[3] = std::clamp(std::max(y1, y2), 0.f, (float)(imgHeight - 1));
+
+        if (r.bbox[2] > r.bbox[0] + 1 && r.bbox[3] > r.bbox[1] + 1)
+        {
+            output.push_back(r);
+        }
     }
-    return proposals;
+
+    return output;
 }
